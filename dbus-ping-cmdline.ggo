@@ -1,0 +1,42 @@
+#
+# cmdline.ggo.in D-Bus benchmarking tools gengetopt input file
+#
+# Copyright (C) 2011 BMW AG
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+#
+
+args "--default-optional --show-required --unamed-opts=CONTENTS"
+
+option "verbose" v "Inrease program output verbosity"
+option "bash" - "Print result as bash variables"
+
+defgroup "Connection"
+groupoption "session" - "send to the session message bus" group="Connection"
+groupoption "system" - "send to the system message bus" group="Connection"
+groupoption "address" a "specify the address of the message bus" string typestr="ADDRESS" group="Connection"
+
+section "Message"
+option "type" t "message type" values="method_call","signal" default="method_call"
+option "destination" d "bus name of the destination" string typestr="BUS_NAME"
+option "path" p "target object's path" string typestr="OBJECT_PATH" required
+option "interface" i "interface of the target object" string typestr="NAME"
+option "member" m "member of the target object" string typestr="NAME" required
+option "contents-multiply" x "append message contents clone" int default="0" typestr="COUNT"
+
+section "Send"
+option "count" c "number of times the message will be sent" longlong default="1"
+option "clone" - "intensively rebuild the message before sending (default is copy)"
+option "reply-timeout" - "reply message timeout" int default="-1" typestr="MSEC"
