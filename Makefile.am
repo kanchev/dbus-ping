@@ -20,6 +20,9 @@ service_DATA = com.bmw.Test.service
 com.bmw.Test.service: com.bmw.Test.service.in
 	sed -e 's,@libexecdir\@,$(libexecdir),g' $< >$@
 
+
+dist_pkgdata_DATA = dbus-genivi-benchmarking.sh
+
 EXTRA_DIST = com.bmw.Test.service.in
 
 CLEANFILES = *~ com.bmw.Test.service

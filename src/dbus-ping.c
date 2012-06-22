@@ -530,7 +530,6 @@ int main(int argc, char *argv[]) {
 
 	dbus_connection_unref(connection);
 	dbus_message_unref(message);
-	dbus_shutdown();
 
 	return 0;
 }
