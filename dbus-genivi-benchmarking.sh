@@ -54,16 +54,16 @@ run_ping_pong() {
     export DBUS_SESSION_BUS_ADDRESS
     log "Executing: dbus-ping ${DBUS_PING_ARGS}"
     DBUS_PING_OUTPUT=$(dbus-ping ${DBUS_PING_ARGS})
-    DBUS_PING_RET=$?
 
-    # TODO remove dbus_shutdown() from dbus-ping so that we have a proper exit code
-    eval $DBUS_PING_OUTPUT
+    DBUS_PING_RET=$?
+    if [ $DBUS_PING_RET -eq 0 ]; then
+        eval $DBUS_PING_OUTPUT
+    fi
 
     # clean up
     kill -9 $DBUS_SESSION_BUS_PID
 
-#    return $DBUS_PING_RET
-    return 0
+    return $DBUS_PING_RET
 }
 
 
@@ -73,8 +73,11 @@ run_benchmark_case() {
     local DBUS_PING_ARGS=$3
     local DBUS_DAEMON_ARGS=$4
 
-    if [ $CONTENTS_MULTIPLY_COUNT > 0 ]; then
-        DBUS_PING_ARGS="$DBUS_PING_ARGS --contents-multiply $CONTENTS_MULTIPLY_COUNT ${DBUS_TEST_DATA}"
+    if [ $CONTENTS_MULTIPLY_COUNT -gt 0 ]; then
+        if [ $CONTENTS_MULTIPLY_COUNT -gt 1 ]; then
+            DBUS_PING_ARGS="$DBUS_PING_ARGS --contents-multiply $CONTENTS_MULTIPLY_COUNT"
+        fi
+        DBUS_PING_ARGS="$DBUS_PING_ARGS ${DBUS_TEST_DATA}"
     fi
 
     log "Starting ${BENCHMARK_NAME}: contents_multiply_count=${CONTENTS_MULTIPLY_COUNT}"
