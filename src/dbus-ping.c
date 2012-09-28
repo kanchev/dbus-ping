@@ -307,7 +307,7 @@ static DBusMessage *message_multiply_contents(DBusMessage *old_message, int coun
 	return message;
 }
 
-static DBusMessage *message_create_contents(struct gengetopt_args_info *args_info, DBusMessage *message) {
+static DBusMessage *message_create_contents(const struct gengetopt_args_info *args_info, DBusMessage *message) {
 	int i;
 	DBusMessageIter message_iter;
 
@@ -360,18 +360,31 @@ static DBusMessage *message_create_contents(struct gengetopt_args_info *args_inf
 	return message;
 }
 
-static DBusMessage *message_create(struct gengetopt_args_info *args_info) {
-	int type = dbus_message_type_from_string(args_info->type_arg);
-	DBusMessage *message;
+static DBusMessage *message_create_nocontents(const struct gengetopt_args_info *args_info) {
+    int type = DBUS_MESSAGE_TYPE_METHOD_CALL;
+    DBusMessage *message;
 
-	assert_error(type == DBUS_MESSAGE_TYPE_METHOD_CALL || type == DBUS_MESSAGE_TYPE_SIGNAL,
-			"Message type '%s' is not supported\n", args_info->type_arg);
+    if (args_info->type_given) {
+        type = dbus_message_type_from_string(args_info->type_arg);
+        assert_error(type == DBUS_MESSAGE_TYPE_METHOD_CALL || type == DBUS_MESSAGE_TYPE_SIGNAL,
+                     "Message type '%s' is not supported\n",
+                     args_info->type_arg);
+    }
 
-	message = type == DBUS_MESSAGE_TYPE_METHOD_CALL ?
-			dbus_message_new_method_call(args_info->destination_arg, args_info->path_arg, args_info->interface_arg, args_info->member_arg) :
-			dbus_message_new_signal(args_info->path_arg, args_info->interface_arg, args_info->member_arg);
-	assert_error(message != NULL, "Unable to allocate message (out of memory)");
+    message = (type == DBUS_MESSAGE_TYPE_METHOD_CALL) ?
+                    dbus_message_new_method_call(
+                                    args_info->destination_arg,
+                                    args_info->path_arg,
+                                    args_info->interface_arg,
+                                    args_info->member_arg) :
+                    dbus_message_new_signal(args_info->path_arg, args_info->interface_arg, args_info->member_arg);
+    assert_error(message != NULL, "Unable to allocate message (out of memory)");
 
+    return message;
+}
+
+static DBusMessage *message_create(const struct gengetopt_args_info *args_info) {
+    DBusMessage* message = message_create_nocontents(args_info);
 	return message_create_contents(args_info, message);
 }
 
@@ -394,14 +407,16 @@ static DBusConnection *dbus_connect(const struct gengetopt_args_info *args_info)
 	return connection;
 }
 
-static DBusMessage *dbus_message_clone(DBusMessage *message) {
-	DBusMessage *clone = dbus_message_clone_header(message);
+static DBusMessage *dbus_message_clone(const struct gengetopt_args_info *args_info, DBusMessage *message) {
+	DBusMessage *clone = message_create_nocontents(args_info);
 	DBusMessageIter iter, append_iter;
 
-	dbus_message_iter_init(message, &iter);
-	dbus_message_iter_init_append(clone, &append_iter);
+    if (args_info->inputs_num) {
+        dbus_message_iter_init(message, &iter);
+        dbus_message_iter_init_append(clone, &append_iter);
 
-	message_append_args(&iter, &append_iter);
+        message_append_args(&iter, &append_iter);
+    }
 
 	return clone;
 }
@@ -412,36 +427,41 @@ static inline usec_t time_now(clockid_t clock_id) {
 	return (usec_t) ts.tv_sec * USEC_PER_SEC + (usec_t) ts.tv_nsec / NSEC_PER_USEC;
 }
 
-static DBusMessage *dbus_message_duplicate(DBusMessage *message, int do_clone) {
+static DBusMessage *dbus_message_duplicate(const struct gengetopt_args_info *args_info, DBusMessage *contents_message) {
 	usec_t time = time_now(CLOCK_MONOTONIC);
-	DBusMessage *clone = do_clone ? dbus_message_clone(message) : dbus_message_copy(message);
+    DBusMessage *message;
 
-	message_duplicate_time += time_now(CLOCK_MONOTONIC) - time;
+    message = args_info->clone_given ? dbus_message_clone(args_info, contents_message) :
+                                       dbus_message_copy(contents_message);
 
-	return clone;
+    message_duplicate_time += time_now(CLOCK_MONOTONIC) - time;
+
+	return message;
 }
 
-static int dbus_send_message(DBusConnection *connection, DBusMessage *message, int reply_timeout, int do_clone) {
+static int dbus_send_message(DBusConnection *connection,
+                             const struct gengetopt_args_info *args_info,
+                             DBusMessage *contents_message) {
 	int ret = 1;
-	DBusMessage *clone = dbus_message_duplicate(message, do_clone);
+	DBusMessage *message = dbus_message_duplicate(args_info, contents_message);
 	usec_t time = time_now(CLOCK_MONOTONIC);
 	DBusMessage *reply;
 	DBusError error;
 
-	dbus_message_set_auto_start(clone, TRUE);
+	dbus_message_set_auto_start(message, TRUE);
 	dbus_error_init(&error);
 
-	reply = dbus_connection_send_with_reply_and_block(connection, clone, reply_timeout, &error);
-	if (dbus_error_is_set(&error)) {
-		fprintf(stderr, CMDLINE_PARSER_PACKAGE ": Send error %s: %s\n", error.name, error.message);
-		dbus_error_free(&error);
-		ret = 0;
-	}
+    reply = dbus_connection_send_with_reply_and_block(connection, message, args_info->reply_timeout_arg, &error);
+    if (dbus_error_is_set(&error)) {
+        fprintf(stderr, CMDLINE_PARSER_PACKAGE ": Send error %s: %s\n", error.name, error.message);
+        dbus_error_free(&error);
+        ret = 0;
+    }
 
 	if (reply)
 		dbus_message_unref(reply);
 
-	dbus_message_unref(clone);
+	dbus_message_unref(message);
 	message_send_time += time_now(CLOCK_MONOTONIC) - time;
 
 	return ret;
@@ -506,30 +526,30 @@ static void show_summary(int sent, int received, const struct gengetopt_args_inf
 
 int main(int argc, char *argv[]) {
 	struct gengetopt_args_info args_info;
-	DBusMessage *message;
+	DBusMessage *contents_message = NULL;
 	DBusConnection *connection;
 	long int count;
 
 	if (cmdline_parser(argc, argv, &args_info) != 0)
 		return -1;
 
-	message = message_create(&args_info);
+	contents_message = message_create(&args_info);
 
 	if (args_info.verbose_given)
-		print_message(message, FALSE);
+		print_message(contents_message, FALSE);
 
 	connection = dbus_connect(&args_info);
 	start_time = time_now(CLOCK_MONOTONIC);
 
 	for (count = 0; count < args_info.count_arg; count++) {
-		dbus_send_message(connection, message, args_info.reply_timeout_arg, args_info.clone_given);
+		dbus_send_message(connection, &args_info, contents_message);
 		update_progress(count, &args_info);
 	}
 
 	show_summary(count, count, &args_info);
 
 	dbus_connection_unref(connection);
-	dbus_message_unref(message);
+	dbus_message_unref(contents_message);
 
 	return 0;
 }
