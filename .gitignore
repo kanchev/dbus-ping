@@ -7,6 +7,7 @@
 
 # autotools
 .deps
+.libs
 Makefile
 Makefile.in
 /aclocal.m4
@@ -18,14 +19,19 @@ Makefile.in
 /install-sh
 /*libtool
 /ltmain.sh
+/m4
 /missing
 /stamp-h1
 
 # compile
 *.o
+/*.lo
+/*.la
 /*.service
 dbus-ping
+dbus-ping-systemd
 dbus-test-service
+dbus-test-service-systemd
 
 # misc
 *~

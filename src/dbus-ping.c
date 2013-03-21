@@ -19,24 +19,16 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  */
-
-#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <string.h>
 
 #include <dbus/dbus.h>
 
 #include "dbus-ping-cmdline.h"
+#include "dbus-ping-common.h"
 #include "dbus-print-message.h"
 
-
-#define USEC_PER_SEC  1000000ULL
-#define USEC_PER_MSEC 1000ULL
-#define NSEC_PER_USEC 1000ULL
-
-typedef uint64_t usec_t;
 
 typedef union {
 	dbus_int16_t i16;
@@ -55,60 +47,6 @@ static usec_t start_time;
 static usec_t message_duplicate_time;
 static usec_t message_send_time;
 
-
-static void assert_error(int expression, const char *fmt, ...) {
-	if (!expression) {
-		va_list ap;
-
-		va_start(ap, fmt);
-		fprintf(stderr, CMDLINE_PARSER_PACKAGE ": ERROR: ");
-		vfprintf(stderr, fmt, ap);
-		fputc('\n', stderr);
-		va_end(ap);
-
-		exit(1);
-	}
-}
-
-static int type_from_name(const char *arg) {
-	if (!strcmp(arg, "string"))			return DBUS_TYPE_STRING;
-	else if (!strcmp(arg, "int16"))		return DBUS_TYPE_INT16;
-	else if (!strcmp(arg, "uint16"))	return DBUS_TYPE_UINT16;
-	else if (!strcmp(arg, "int32"))		return DBUS_TYPE_INT32;
-	else if (!strcmp(arg, "uint32"))	return DBUS_TYPE_UINT32;
-	else if (!strcmp(arg, "int64"))		return DBUS_TYPE_INT64;
-	else if (!strcmp(arg, "uint64"))	return DBUS_TYPE_UINT64;
-	else if (!strcmp(arg, "double"))	return DBUS_TYPE_DOUBLE;
-	else if (!strcmp(arg, "byte"))		return DBUS_TYPE_BYTE;
-	else if (!strcmp(arg, "boolean"))	return DBUS_TYPE_BOOLEAN;
-	else if (!strcmp(arg, "objpath"))	return DBUS_TYPE_OBJECT_PATH;
-	else if (!strcmp(arg, "variant"))	return DBUS_TYPE_VARIANT;
-	else if (!strcmp(arg, "array"))		return DBUS_TYPE_ARRAY;
-	else if (!strcmp(arg, "struct"))	return DBUS_TYPE_STRUCT;
-	else if (!strcmp(arg, "dict"))		return DBUS_TYPE_DICT_ENTRY;
-
-	assert_error(FALSE, "Unknown type '%s'", arg);
-	return DBUS_TYPE_INVALID;
-}
-
-static const char *get_next_data_item(char **items) {
-	char *item = *items;
-	char *delim;
-
-	if (item == NULL || *item == '\0') {
-		fprintf(stderr, CMDLINE_PARSER_PACKAGE ": Data item is badly formed\n");
-		exit(1);
-	}
-
-	delim = strchr(item, ':');
-	if (delim != NULL) {
-		*delim = '\0';
-		*items = delim + 1;
-	} else
-		*items = item + strlen(item);
-
-	return item;
-}
 
 static void append_arg(DBusMessageIter *iter, int type, const char *value) {
 	dbus_uint16_t uint16;
@@ -419,12 +357,6 @@ static DBusMessage *dbus_message_clone(const struct gengetopt_args_info *args_in
     }
 
 	return clone;
-}
-
-static inline usec_t time_now(clockid_t clock_id) {
-	struct timespec ts;
-	assert_error(clock_gettime(clock_id, &ts) == 0, "Unable to get clock time");
-	return (usec_t) ts.tv_sec * USEC_PER_SEC + (usec_t) ts.tv_nsec / NSEC_PER_USEC;
 }
 
 static DBusMessage *dbus_message_duplicate(const struct gengetopt_args_info *args_info, DBusMessage *contents_message) {
